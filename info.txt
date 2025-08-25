@@ -1,0 +1,13 @@
+调试开发板，每次插入USB，ACM0都需要授权，否则无法读写。
+
+ 
+
+chmod 777 /dev/ttyACM0
+ 
+
+可以使用：
+
+sudo usermod -aG dialout gzdlw
+
+gzdlw是用户名，然后注销一下，就不用每次都授权了。
+
