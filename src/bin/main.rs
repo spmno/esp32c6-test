@@ -21,6 +21,7 @@ use alloc::vec::Vec;
 use alloc::format;
 use core::convert::TryInto;
 
+
 use ieee80211::{
     common::{CapabilitiesInformation, FCFFlags},
     element_chain,
@@ -61,7 +62,7 @@ fn main() -> ! {
     
     let wifi = peripherals.WIFI;
     let (mut controller, interfaces) = esp_wifi::wifi::new(&init, wifi).unwrap();
-    match controller.set_mode(esp_wifi::wifi::WifiMode::Ap) {
+    match controller.set_mode(esp_wifi::wifi::WifiMode::ApSta) {
         Ok(_) => {
             info!("WiFi controller set mode successfully");
         }
@@ -71,20 +72,19 @@ fn main() -> ! {
         }
     }
     
-    // Configure AP settings
-    let ap_config = esp_wifi::wifi::Configuration::AccessPoint(esp_wifi::wifi::AccessPointConfiguration {
+    // Configure STA settings
+    let sta_config = esp_wifi::wifi::Configuration::Client(esp_wifi::wifi::ClientConfiguration {
         ssid: "RID-DRONE123456789".try_into().unwrap(),
-        channel: 6,
-        secondary_channel: None,
+        channel: Some(6),
         ..Default::default()
     });
     
-    match controller.set_configuration(&ap_config) {
+    match controller.set_configuration(&sta_config) {
         Ok(_) => {
-            info!("AP configuration set successfully (channel 6)");
+            info!("STA configuration set successfully (channel 6)");
         }
         Err(e) => {
-            error!("Failed to set AP configuration: {:?}", e);
+            error!("Failed to set STA configuration: {:?}", e);
             loop {} // Halt on startup failure
         }
     }
@@ -126,7 +126,10 @@ fn main() -> ! {
             loop {} // Halt on startup failure
         }
     }
-
+    unsafe {
+        let result = esp_wifi_sys::include::esp_wifi_set_channel(6,  0);
+        info!("set channel result {:x}", result);
+    };
     //--------------------test data --------------------------------//
     let mut beacon = [0u8; 300];
     let length = beacon
@@ -194,7 +197,7 @@ fn main() -> ! {
         //);
         
         // Send raw beacon frame using sniffer mode
-        match wifi_device.send_raw_frame(false, &beacon, false) {
+        match wifi_device.send_raw_frame(true, &beacon, false) {
             Ok(_) => {
                 // Successfully sent beacon frame
                 info!("send success.");
@@ -204,7 +207,7 @@ fn main() -> ! {
             }
         }
         
-        delay.delay_millis(1000); // 100ms interval
+        delay.delay_millis(500); // 100ms interval
     }
 }
 

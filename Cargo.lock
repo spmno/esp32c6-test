@@ -683,6 +683,7 @@ dependencies = [
  "esp-hal",
  "esp-println",
  "esp-wifi",
+ "esp-wifi-sys",
  "fixedstr",
  "ieee80211",
  "log",
