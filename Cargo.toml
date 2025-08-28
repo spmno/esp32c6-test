@@ -25,6 +25,7 @@ fixedstr = "0.5.9"
 esp-alloc = "0.8.0"
 ieee80211 = { version = "0.5.6", default-features = false }
 esp-wifi-sys = { version = "0.7.1", features=["esp32c6"] }
+crc16 = "0.4.0"
 
 [profile.dev]
 # Rust debug is too slow.

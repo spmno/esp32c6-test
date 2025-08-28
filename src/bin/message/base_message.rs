@@ -2,22 +2,26 @@
 use crate::message::message::MessageType;
 extern crate alloc;
 use super::message::Message;
-use fixedstr::str24;
+use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use alloc::vec;
 
 /// 基本类型，主要包含了RID的字符串
 #[derive(Debug, Clone, PartialEq)]
 pub struct BaseMessage {
-    pub id_type: u8,          // 高位 4 位 (7-4 位)
+    pub id_type: u8 ,          // 高位 4 位 (7-4 位)
     pub ua_type: u8,          // 低位 4 位 (3-0 位)
-    pub uas_id: str24,       // UAS 识别身份信息（字符串类型）
+    pub uas_id: String,       // UAS 识别身份信息（字符串类型）
     pub reserved: [u8; 3],    // 3 字节预留空间
 }
 
 impl BaseMessage {
     pub const MESSAGE_TYPE: u8 = 0x00;
     const EXPECTED_LENGTH: usize = 24;
+
+    pub fn new(uas_id: &str) -> Self {
+        Self { id_type: 1, ua_type: 1, uas_id: uas_id.to_string(), reserved: [0, 0, 0] }
+    }
 }
 
 impl Message for BaseMessage {
@@ -45,4 +49,5 @@ impl Message for BaseMessage {
     }
 
 }
+
 

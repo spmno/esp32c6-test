@@ -1,13 +1,14 @@
 use crate::message::message::MessageType;
 
-use super::message::{Message, MessageError};
+use super::message::Message;
+use alloc::vec::Vec;
+
 
 /// 位置向量报文，强 制 动 态 报 文 ，主要包含位置 ， 高度 ， 速度 ， 时间等标识 UA 运行情况的报文 。
 #[derive(Debug, Clone, PartialEq)]
 pub struct PositionVectorMessage {
     // 第1字节 (运行状态和标志位)
     pub run_status: u8,         // 运行状态 (7-4位)
-    #[serde(default)]
     pub reserved_flag: bool,     // 预留标志位 (3位)
     pub height_type: u8,        // 高度类型位 (2位) - 0-3
     pub track_direction: u8,   // 航迹角 E/W 方向标志 (1位)
@@ -32,9 +33,7 @@ pub struct PositionVectorMessage {
     pub timestamp: u16,          // 时间戳 (2字节小端序)
 
     // 第23-24字节
-    #[serde(default)]
     pub timestamp_accuracy: u8, // 时间戳精度 (3-0位, 4 bits)
-    #[serde(default)]
     pub reserved: u8,           // 预留 (1字节)
 }
 
@@ -56,6 +55,30 @@ impl PositionVectorMessage {
         } else {
             self.ground_speed as f32
         }
+    }
+
+    pub fn new(latitude: i32, longitude: i32) -> Self {
+        Self { 
+            run_status: 1, 
+            reserved_flag: false, 
+            height_type: 1, 
+            track_direction: 1, 
+            speed_multiplier: 0, 
+            track_angle: 181, 
+            ground_speed: 0, 
+            vertical_speed: 0, 
+            latitude: latitude, 
+            longitude: longitude, 
+            pressure_altitude: 2271, 
+            geometric_altitude: 2116, 
+            ground_altitude: 2000, 
+            vertical_accuracy: 12, 
+            horizontal_accuracy: 2, 
+            speed_accuracy: 4, 
+            timestamp: 32777, 
+            timestamp_accuracy: 0, 
+            reserved: 0
+         }
     }
 
 }

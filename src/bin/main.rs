@@ -6,6 +6,7 @@
     holding buffers for the duration of a data transfer."
 )]
 
+pub mod message;
 use core::marker::PhantomData;
 
 use esp_hal::clock::CpuClock;
@@ -30,6 +31,8 @@ use ieee80211::{
     scroll::Pwrite,
     supported_rates,
 };
+
+use crate::message::{message::Message, packet_message::PacketMessage};
 
 
 #[panic_handler]
@@ -92,25 +95,9 @@ fn main() -> ! {
         
     // Use the sniffer interface for raw frame transmission
     let mut wifi_device = interfaces.sniffer;
-    
-    // Create simple drone RID data
-    let drone_id = b"DRONE-123456789";
-    let ssid = format!("RID-{}", core::str::from_utf8(drone_id).unwrap());
-    
-    // Simple RID payload
-    let rid_data = b"RID:DRONE123456789,LAT:39.9042,LON:116.4074,ALT:100";
-    
-    // Create beacon frame
-    let beacon_frame = create_rid_beacon(&ssid,
-        &MAC_ADDRESS,
-        rid_data,
-    );
-    
-    info!("Drone RID beacon transmitting on SSID: {}", ssid);
-    info!("MAC Address: {:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}", 
+        info!("MAC Address: {:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}", 
           MAC_ADDRESS[0], MAC_ADDRESS[1], MAC_ADDRESS[2], 
           MAC_ADDRESS[3], MAC_ADDRESS[4], MAC_ADDRESS[5]);
-    info!("Frame size: {} bytes", beacon_frame.len());
     
     let delay = Delay::new();
     let mut counter = 0;
@@ -131,6 +118,14 @@ fn main() -> ! {
         info!("set channel result {:x}", result);
     };
     //--------------------test data --------------------------------//
+    let package = PacketMessage::build_rid_package();
+    let rid_data = package.encode();
+    let mut rid_element = Vec::new();
+    rid_element.extend_from_slice(&[0xfa, 0x0b, 0xbc]); // OUI
+    rid_element.push(0x0d); // OUI type
+    rid_element.extend_from_slice(rid_data.as_slice());
+    let rid_slice = rid_element.as_slice();
+    
     let mut beacon = [0u8; 300];
     let length = beacon
         .pwrite(
@@ -149,25 +144,18 @@ fn main() -> ! {
                     beacon_interval: 1000,
                     capabilities_info: CapabilitiesInformation::new().with_is_ess(true),
                     elements: element_chain! {
-                        SSIDElement::new(ssid).unwrap(),
+                        SSIDElement::new(package.get_ssid()).unwrap(),
                         // These are known good values.
                         supported_rates![
-                            1 B,
-                            2 B,
-                            5.5 B,
-                            11 B,
-                            6,
-                            9,
-                            12,
-                            18
+                            1 B
                         ],
                         DSSSParameterSetElement {
                             current_channel: 6,
                         },
-                        // This contains the Traffic Indication Map(TIM), for which `ieee80211-rs` currently lacks support.
+                        // RID data element (vendor-specific)
                         RawIEEE80211Element {
-                            tlv_type: 5,
-                            slice: [0x01, 0x02, 0x00, 0x00].as_slice(),
+                            tlv_type: 221, // Vendor-specific element
+                            slice: rid_slice,
                             _phantom: PhantomData
                         }
                     },
@@ -189,13 +177,6 @@ fn main() -> ! {
             info!("Transmitted {} beacon frames", counter);
         }
         
-        // Create new beacon frame
-        //let updated_beacon = create_rid_beacon(
-        //    &ssid,
-        //    &MAC_ADDRESS,
-        //    rid_data,
-        //);
-        
         // Send raw beacon frame using sniffer mode
         match wifi_device.send_raw_frame(true, &beacon, false) {
             Ok(_) => {
@@ -211,68 +192,3 @@ fn main() -> ! {
     }
 }
 
-fn create_rid_beacon(ssid: &str, bssid: &[u8; 6], rid_data: &[u8]) -> Vec<u8> {
-    let mut frame = Vec::new();
-    
-    // Frame Control (2 bytes) - Beacon frame
-    frame.extend_from_slice(&[0x80, 0x00]);
-    
-    // Duration (2 bytes)
-    frame.extend_from_slice(&[0x00, 0x00]);
-    
-    // Destination Address (broadcast) (6 bytes)
-    frame.extend_from_slice(&[0xff, 0xff, 0xff, 0xff, 0xff, 0xff]);
-    
-    // Source Address (6 bytes)
-    frame.extend_from_slice(bssid);
-    
-    // BSSID (6 bytes)
-    frame.extend_from_slice(bssid);
-    
-    // Sequence Control (2 bytes)
-    frame.extend_from_slice(&[0x00, 0x00]);
-    
-    // Beacon Frame Body
-    // Timestamp (8 bytes) - will be updated by hardware
-    frame.extend_from_slice(&[0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
-    
-    // Beacon Interval (2 bytes) - 100 TUs = 100ms
-    frame.extend_from_slice(&[0x64, 0x00]);
-    
-    // Capability Information (2 bytes)
-    frame.extend_from_slice(&[0x01, 0x04]); // Infrastructure mode, open network
-    
-    // SSID Element
-    let ssid_bytes = ssid.as_bytes();
-    let ssid_len = ssid_bytes.len().min(32);
-    frame.push(0x00); // SSID element ID
-    frame.push(ssid_len as u8);
-    frame.extend_from_slice(&ssid_bytes[..ssid_len]);
-    
-    // Supported Rates Element
-    frame.push(0x01); // Rates element ID
-    frame.push(0x08); // Length
-    frame.extend_from_slice(&[0x82, 0x84, 0x8b, 0x96, 0x0c, 0x12, 0x18, 0x24]);
-    
-    // DSS Parameter Set Element
-    frame.push(0x03); // DSS element ID
-    frame.push(0x01); // Length
-    frame.push(0x06); // Channel 6
-    
-    // TIM Element
-    frame.push(0x05); // TIM element ID
-    frame.push(0x04); // Length
-    frame.extend_from_slice(&[0x00, 0x01, 0x00, 0x00]);
-    
-    // Vendor-Specific Element with RID data
-    if !rid_data.is_empty() {
-        let data_len = rid_data.len().min(255 - 6); // Leave room for OUI and type
-        frame.push(0xdd); // Vendor-specific element ID
-        frame.push((data_len + 6) as u8); // Length (OUI + type + data)
-        frame.extend_from_slice(&[0xfa, 0x0b, 0xbc]); // Example OUI
-        frame.push(0x0d); // OUI type
-        frame.extend_from_slice(&rid_data[..data_len]);
-    }
-    
-    frame
-}

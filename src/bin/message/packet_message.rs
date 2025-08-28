@@ -1,10 +1,15 @@
 use crate::message::{base_message::BaseMessage, position_vector_message::PositionVectorMessage, system_message::SystemMessage};
-use super::message::{Message, MessageError};
+use super::message::Message;
+use core::sync::atomic::AtomicU8;
+use alloc::vec::Vec;
+use alloc::format;
+use alloc::string::String;
+use core::sync::atomic::Ordering;
 
 static RID_COUNTER: AtomicU8 = AtomicU8::new(1);
 
 /// 以整包形式发送，其中包含了BaseMessage， SystemMessage, PositionVectorMessage，主要模仿收到大疆的结构类型
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug)]
 pub struct PacketMessage {
     protocol_version: u8,          // 协议版本（1字节）
     message_counter: u8,          // 消息计数器（2字节）
@@ -29,7 +34,7 @@ impl PacketMessage {
     ) -> Self {
         Self {
             protocol_version: 0xf1,
-            message_counter: 1,
+            message_counter: 3,
             message_size: Self::MESSAGE_SIZE,
             message_quantity: Self::MESSAGE_QUANTITY,
             base_message: base,
@@ -43,12 +48,21 @@ impl PacketMessage {
     pub fn get_ssid(&self) -> String {
         return format!("RID-{}", self.base_message.uas_id.clone());
     }
+
+    pub fn build_rid_package() -> Self {
+        let fake_latitude = 1234844601;
+        let fake_longitude = 417144677;
+        let base = BaseMessage::new("1581F7FVC251A00CQ211");
+        let system = SystemMessage::new(fake_latitude, fake_longitude);
+        let position = PositionVectorMessage::new(fake_latitude, fake_longitude);
+        let package = Self::new(base, system, position);
+        package
+    }
 }
 
 impl Message for PacketMessage {
 
     fn encode(&self) -> Vec<u8> {
-        self.print();
         let mut bytes = Vec::new();
         
         // 编码头部

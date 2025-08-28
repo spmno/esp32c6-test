@@ -1,12 +1,12 @@
-use super::message::{Message, MessageError, MessageType};
-
+use super::message::{Message, MessageType};
+use alloc::vec::Vec;
+use esp_hal::timer::timg::TimerGroup;
 
 // SystemMessage 结构体，系统报文（报文类型 0x4）为周期性，强制静态报文，用于描述无人驾驶航空器控制站位置和高度 、 航空器组群及额外的系统信息
 #[derive(Debug, Clone, PartialEq)]
 pub struct SystemMessage {
     // 起始字节1 (1字节)
     pub coordinate_system: u8,     // 坐标系类型 (7位)
-    #[serde(default)]
     pub reserved_bits: u8,         // 预留位 (6-5位)
     pub classification_region: u8, // 等级分类归属区域 (4-2位)
     pub station_type: u8,          // 控制站位置类型 (1-0位)
@@ -24,20 +24,16 @@ pub struct SystemMessage {
     pub altitude_lower: u16,  // 运行区域高度下限 (几何高度, 小端序)
 
     // 起始字节17 (1字节)
-    #[serde(default)]
     pub ua_category: u8,           // UA运行类别
 
     // 起始字节18 (1字节)
-    #[serde(default)]
     pub ua_level: u8,              // UA等级
 
     // 起始字节19 (2字节)
-    #[serde(default)]
     pub station_altitude: u16,     // 控制站高度 (小端序)
 
     // 时间戳
     pub timestamp: u32,     // 时间戳 (Unix时间, 秒)
-    #[serde(default)]
     pub reserved: u8,       // 预留
 }
 
@@ -45,6 +41,25 @@ impl SystemMessage {
     pub const MESSAGE_TYPE: u8 = 0x04;
     const EXPECTED_LENGTH: usize = 24;
 
+    pub fn new(latitude: i32, longitude: i32) -> Self {
+        Self { 
+            coordinate_system: 0, 
+            reserved_bits: 0, 
+            classification_region: 2, 
+            station_type: 1, 
+            latitude: latitude, 
+            longitude: longitude, 
+            operation_count: 1, 
+            operation_radius: 0, 
+            altitude_upper: 0, 
+            altitude_lower: 0, 
+            ua_category: 0, 
+            ua_level: 0, 
+            station_altitude: 0, 
+            timestamp: 0, 
+            reserved: 0
+         }
+    }
 }
 
 
@@ -82,8 +97,23 @@ impl Message for SystemMessage {
         // 控制站高度
         bytes.extend_from_slice(&self.station_altitude.to_le_bytes());
         
-        // 时间戳和预留
-         let timestamp = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() as u32;
+        // 时间戳和预留 - 使用ESP32-C6定时器获取系统时间
+        let timestamp = {
+            let timg0 = unsafe { &*esp_hal::peripherals::TIMG0::ptr() };
+            let t = timg0.t(0); // 访问定时器0
+            
+            // 触发更新以捕获当前值
+            t.update().write(|w| w.update().set_bit());
+            while t.update().read().update().bit_is_set() {
+                // 等待更新完成
+            }
+            
+            // 读取定时器值
+            let value_lo = t.lo().read().bits() as u64;
+            let value_hi = t.hi().read().bits() as u64;
+            let timer_value = (value_hi << 32) | value_lo;
+            timer_value as u32
+        };
         bytes.extend_from_slice(&timestamp.to_le_bytes());
 
         bytes.push(self.reserved);
